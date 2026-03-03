@@ -1,15 +1,13 @@
-"""
-Pydantic models for API request/response.
-"""
+"""Pydantic models for API request/response."""
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 
 class AnalyzeRequest(BaseModel):
     repository_url: str = Field(
         ...,
         description="Full GitHub repository URL",
-        examples=["https://github.com/owner/repo"],
+        examples=["https://github.com/pallets/flask"],
     )
 
 
@@ -20,15 +18,15 @@ class AnalyzeResponse(BaseModel):
 
 
 class QueryRequest(BaseModel):
-    analysis_id: str = Field(..., description="The analysis ID returned from /analyze")
-    question: str = Field(..., min_length=3, description="Natural language question about the codebase")
+    analysis_id: str
+    question: str = Field(..., min_length=3)
 
 
 class QueryResponse(BaseModel):
     analysis_id: str
     question: str
     answer: str
-    sources: list[str] = Field(default_factory=list, description="Relevant file paths used")
+    sources: list[str] = Field(default_factory=list)
 
 
 class ReportResponse(BaseModel):
@@ -43,6 +41,11 @@ class ReportResponse(BaseModel):
     entry_points: list[dict]
     file_summaries: list[dict]
     mermaid_diagrams: list[dict]
+
+
+class StatusResponse(BaseModel):
+    analysis_id: str
+    status: str
 
 
 class ErrorResponse(BaseModel):

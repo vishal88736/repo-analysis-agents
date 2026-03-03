@@ -1,13 +1,10 @@
-"""
-Structured logging configuration.
-"""
+"""Structured logging configuration."""
 
 import logging
 import sys
 
 
 def setup_logging(level: str = "INFO") -> None:
-    """Configure structured logging for the application."""
     log_level = getattr(logging, level.upper(), logging.INFO)
 
     formatter = logging.Formatter(
@@ -20,12 +17,9 @@ def setup_logging(level: str = "INFO") -> None:
 
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
-    # Clear existing handlers to avoid duplicates
     root_logger.handlers.clear()
     root_logger.addHandler(handler)
 
     # Suppress noisy libraries
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
-    logging.getLogger("chromadb").setLevel(logging.WARNING)
-    logging.getLogger("git").setLevel(logging.WARNING)
+    for lib in ("httpx", "httpcore", "chromadb", "git", "sentence_transformers"):
+        logging.getLogger(lib).setLevel(logging.WARNING)

@@ -1,19 +1,24 @@
 """
-Production-grade Grok (xAI) API client wrapper.
+Production-grade Groq API client wrapper.
+
+Uses the OFFICIAL groq Python SDK (pip install groq).
+Runs open-source models (Llama 3.3, Mixtral, Gemma, etc.) on Groq LPU hardware.
 
 Features:
-  - Async support via openai AsyncOpenAI
-  - Retry with exponential backoff (tenacity)
-  - Rate limit handling via asyncio.Semaphore
-  - Token usage logging
-  - Structured JSON output parsing with Pydantic validation
+  - AsyncGroq client for non-blocking calls
+  - Retry with exponential backoff (tenacity) for rate limits & transient errors
+  - asyncio.Semaphore for concurrency control
+  - Token usage tracking across all calls
+  - Structured JSON output with Pydantic validation
+  - Model selection (heavy model for analysis, fast model for simple tasks)
 """
 
 import json
 import logging
+import asyncio
 from typing import TypeVar, Type
 
-from openai import AsyncOpenAI, RateLimitError, APITimeoutError, APIConnectionError
+from groq import AsyncGroq, RateLimitError, APITimeoutError, APIConnectionError, APIStatusError
 from pydantic import BaseModel
 from tenacity import (
     retry,
@@ -22,7 +27,6 @@ from tenacity import (
     retry_if_exception_type,
     before_sleep_log,
 )
-import asyncio
 
 from app.config import settings
 from app.core.exceptions import LLMError, LLMRateLimitError, LLMResponseValidationError
@@ -59,12 +63,15 @@ class TokenUsageTracker:
         }
 
 
-class GrokClient:
+class GroqClient:
     """
-    Async wrapper around the xAI Grok API (OpenAI-compatible).
+    Async wrapper around the Groq API using the official groq-python SDK.
+
+    Groq runs open-source models (Llama, Mixtral, Gemma, etc.) at extreme speed
+    on their custom LPU (Language Processing Unit) hardware.
 
     Usage:
-        client = GrokClient()
+        client = GroqClient()
         result = await client.chat("Explain this code", system="You are a code analyst.")
         parsed = await client.structured_chat(prompt, system, MyPydanticModel)
     """
@@ -72,22 +79,20 @@ class GrokClient:
     def __init__(
         self,
         api_key: str | None = None,
-        base_url: str | None = None,
         model: str | None = None,
+        fast_model: str | None = None,
         max_concurrent: int | None = None,
     ):
-        self._api_key = api_key or settings.xai_api_key
-        self._base_url = base_url or settings.xai_base_url
-        self._model = model or settings.xai_model
+        self._api_key = api_key or settings.groq_api_key
+        self._model = model or settings.groq_model
+        self._fast_model = fast_model or settings.groq_fast_model
         self._max_concurrent = max_concurrent or settings.max_concurrent_llm_calls
 
         if not self._api_key:
-            raise LLMError("XAI_API_KEY is not configured. Set it in .env file.")
+            raise LLMError("GROQ_API_KEY is not configured. Get one at https://console.groq.com")
 
-        self._client = AsyncOpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
-        )
+        # Official AsyncGroq client
+        self._client = AsyncGroq(api_key=self._api_key)
         self._semaphore = asyncio.Semaphore(self._max_concurrent)
         self.token_usage = TokenUsageTracker()
 
@@ -101,28 +106,35 @@ class GrokClient:
     async def _call_api(
         self,
         messages: list[dict],
+        model: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
         response_format: dict | None = None,
     ) -> tuple[str, int, int]:
         """
         Core API call with retry logic and rate-limit semaphore.
-        Returns (content, prompt_tokens, completion_tokens).
+
+        The semaphore ensures we never exceed max_concurrent_llm_calls parallel
+        requests to Groq, even when processing a full batch concurrently.
+
+        Returns: (content, prompt_tokens, completion_tokens)
         """
+        used_model = model or self._model
+
         async with self._semaphore:
             logger.debug(
-                "Grok API call | model=%s | messages=%d | temp=%.2f",
-                self._model,
+                "Groq API call | model=%s | messages=%d | temp=%.2f",
+                used_model,
                 len(messages),
-                temperature or settings.llm_temperature,
+                temperature or settings.groq_temperature,
             )
             try:
-                kwargs = dict(
-                    model=self._model,
-                    messages=messages,
-                    temperature=temperature or settings.llm_temperature,
-                    max_tokens=max_tokens or settings.llm_max_tokens,
-                )
+                kwargs: dict = {
+                    "model": used_model,
+                    "messages": messages,
+                    "temperature": temperature or settings.groq_temperature,
+                    "max_tokens": max_tokens or settings.groq_max_tokens,
+                }
                 if response_format:
                     kwargs["response_format"] = response_format
 
@@ -135,7 +147,8 @@ class GrokClient:
                 await self.token_usage.record(prompt_tokens, completion_tokens)
 
                 logger.info(
-                    "Grok API success | prompt_tokens=%d | completion_tokens=%d",
+                    "Groq API success | model=%s | prompt_tok=%d | completion_tok=%d",
+                    used_model,
                     prompt_tokens,
                     completion_tokens,
                 )
@@ -143,14 +156,17 @@ class GrokClient:
                 return content, prompt_tokens, completion_tokens
 
             except RateLimitError as e:
-                logger.warning("Grok API rate limit hit: %s", e)
-                raise
+                logger.warning("Groq rate limit hit (will retry): %s", e)
+                raise  # tenacity will retry
             except (APITimeoutError, APIConnectionError) as e:
-                logger.warning("Grok API connection issue: %s", e)
-                raise
+                logger.warning("Groq connection issue (will retry): %s", e)
+                raise  # tenacity will retry
+            except APIStatusError as e:
+                logger.error("Groq API status error: %s", e)
+                raise LLMError(f"Groq API error: {e.status_code} - {e.message}")
             except Exception as e:
-                logger.error("Grok API unexpected error: %s", e)
-                raise LLMError(f"Unexpected Grok API error: {e}")
+                logger.error("Groq API unexpected error: %s", e)
+                raise LLMError(f"Unexpected Groq API error: {e}")
 
     async def chat(
         self,
@@ -158,13 +174,21 @@ class GrokClient:
         system: str = "You are a helpful assistant.",
         temperature: float | None = None,
         max_tokens: int | None = None,
+        use_fast_model: bool = False,
     ) -> str:
-        """Simple chat completion. Returns raw string."""
+        """
+        Simple chat completion. Returns raw string.
+
+        Args:
+            use_fast_model: If True, uses the smaller/faster model (e.g., llama-3.1-8b-instant)
+                           for simpler tasks like Mermaid generation.
+        """
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ]
-        content, _, _ = await self._call_api(messages, temperature, max_tokens)
+        model = self._fast_model if use_fast_model else self._model
+        content, _, _ = await self._call_api(messages, model=model, temperature=temperature, max_tokens=max_tokens)
         return content
 
     async def structured_chat(
@@ -174,20 +198,22 @@ class GrokClient:
         response_model: Type[T],
         temperature: float | None = None,
         max_tokens: int | None = None,
+        use_fast_model: bool = False,
     ) -> T:
         """
         Chat completion with structured JSON output validated against a Pydantic model.
-        Requests JSON mode from the API and parses + validates the response.
+
+        Uses Groq's JSON mode (response_format={"type": "json_object"}) and
+        validates the output against the provided Pydantic schema.
         """
         schema_description = json.dumps(
             response_model.model_json_schema(), indent=2
         )
         enhanced_system = (
             f"{system}\n\n"
-            f"You MUST respond with valid JSON that matches this exact schema:\n"
+            f"You MUST respond with valid JSON that conforms to this schema:\n"
             f"```json\n{schema_description}\n```\n"
-            f"Do NOT include any text outside the JSON object. "
-            f"Do NOT wrap it in markdown code fences."
+            f"Respond with ONLY the JSON object. No markdown fences, no explanations."
         )
 
         messages = [
@@ -195,46 +221,37 @@ class GrokClient:
             {"role": "user", "content": prompt},
         ]
 
+        model = self._fast_model if use_fast_model else self._model
+
         content, _, _ = await self._call_api(
             messages,
-            temperature,
-            max_tokens,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
             response_format={"type": "json_object"},
         )
 
-        # Parse and validate
+        # Parse and validate against Pydantic model
         try:
-            # Strip potential markdown fences
             cleaned = content.strip()
+            # Strip markdown fences if the model accidentally includes them
             if cleaned.startswith("```"):
                 lines = cleaned.split("\n")
-                # Remove first and last lines (fences)
-                cleaned = "\n".join(lines[1:-1])
+                cleaned = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3].strip()
 
             data = json.loads(cleaned)
             return response_model.model_validate(data)
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse LLM JSON response: %s\nRaw: %s", e, content[:500])
+            logger.error("Failed to parse Groq JSON response: %s\nRaw: %s", e, content[:500])
             raise LLMResponseValidationError(
                 f"LLM returned invalid JSON: {e}",
                 details=content[:1000],
             )
         except Exception as e:
-            logger.error("Failed to validate LLM response against schema: %s", e)
+            logger.error("Pydantic validation failed on Groq response: %s", e)
             raise LLMResponseValidationError(
                 f"LLM response failed Pydantic validation: {e}",
                 details=content[:1000],
             )
-
-    async def get_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """Get embeddings from Grok API for a list of texts."""
-        async with self._semaphore:
-            try:
-                response = await self._client.embeddings.create(
-                    model=settings.xai_embedding_model,
-                    input=texts,
-                )
-                return [item.embedding for item in response.data]
-            except Exception as e:
-                logger.error("Embedding API error: %s", e)
-                raise LLMError(f"Embedding API error: {e}")

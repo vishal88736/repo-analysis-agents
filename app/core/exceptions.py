@@ -1,13 +1,9 @@
-"""
-Custom exception hierarchy for the application.
-"""
+"""Custom exception hierarchy."""
 
 from fastapi import HTTPException, status
 
 
 class AnalysisError(Exception):
-    """Base exception for analysis errors."""
-
     def __init__(self, message: str, details: str | None = None):
         self.message = message
         self.details = details
@@ -20,12 +16,12 @@ class RepositoryCloneError(AnalysisError):
 
 
 class LLMError(AnalysisError):
-    """Error communicating with the Grok LLM API."""
+    """Error communicating with Groq API."""
     pass
 
 
 class LLMRateLimitError(LLMError):
-    """Rate limit exceeded on Grok API."""
+    """Rate limit exceeded on Groq API."""
     pass
 
 
@@ -42,10 +38,3 @@ class ParsingError(AnalysisError):
 class AnalysisNotFoundError(AnalysisError):
     """Requested analysis ID not found."""
     pass
-
-
-def analysis_not_found_exception(analysis_id: str) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Analysis with ID '{analysis_id}' not found.",
-    )

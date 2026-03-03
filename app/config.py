@@ -1,6 +1,5 @@
 """
-Centralized configuration using Pydantic Settings.
-All values loaded from .env file with sane defaults.
+Centralized configuration — Groq API + processing settings.
 """
 
 from pathlib import Path
@@ -14,19 +13,17 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # --- Grok API ---
-    xai_api_key: str = ""
-    xai_base_url: str = "https://api.x.ai/v1"
-    xai_model: str = "grok-3"
-    xai_embedding_model: str = "grok-embedding"
+    # --- Groq API ---
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+    groq_fast_model: str = "llama-3.1-8b-instant"
+    groq_max_tokens: int = 4096
+    groq_temperature: float = 0.2
 
     # --- Processing ---
     batch_size: int = 10
     max_concurrent_llm_calls: int = 5
     max_file_size_kb: int = 500
-    worker_pool_size: int = 10
-    llm_temperature: float = 0.2
-    llm_max_tokens: int = 4096
     llm_retry_attempts: int = 3
     llm_retry_delay: float = 2.0
 
@@ -39,6 +36,7 @@ class Settings(BaseSettings):
     rag_top_k: int = 10
     rag_chunk_size: int = 1000
     rag_chunk_overlap: int = 200
+    embedding_model: str = "all-MiniLM-L6-v2"
 
     # --- Server ---
     host: str = "0.0.0.0"

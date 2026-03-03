@@ -1,20 +1,19 @@
-"""
-Pydantic models for the dependency graph.
-"""
+"""Pydantic models for the dependency graph."""
 
 from __future__ import annotations
 from pydantic import BaseModel, Field
+from collections import defaultdict
 
 
 class DependencyEdge(BaseModel):
     source: str
     target: str
-    relationship: str = "imports"  # imports | calls | extends
+    relationship: str = "imports"
 
 
 class DependencyNode(BaseModel):
     id: str
-    type: str = "file"  # file | function | class
+    type: str = "file"
     label: str = ""
     file_path: str = ""
 

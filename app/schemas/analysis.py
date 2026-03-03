@@ -1,12 +1,8 @@
-"""
-Pydantic models for file analysis, agent outputs, and reports.
-"""
+"""Pydantic models for file analysis, agent outputs, and reports."""
 
 from __future__ import annotations
 from pydantic import BaseModel, Field
 
-
-# --- File Metadata ---
 
 class FileMetadata(BaseModel):
     path: str = Field(..., description="Relative file path from repo root")
@@ -14,8 +10,6 @@ class FileMetadata(BaseModel):
     language: str = Field(default="unknown")
     extension: str = Field(default="")
 
-
-# --- Tree-sitter Parsed Structure ---
 
 class ParsedFunction(BaseModel):
     name: str
@@ -42,8 +36,6 @@ class ParsedStructure(BaseModel):
     imports: list[ParsedImport] = Field(default_factory=list)
 
 
-# --- LLM Agent Output Models ---
-
 class FunctionAnalysis(BaseModel):
     name: str
     description: str = ""
@@ -65,8 +57,6 @@ class FileAnalysisResult(BaseModel):
     external_dependencies: list[str] = Field(default_factory=list)
 
 
-# --- Combined Report ---
-
 class EntryPoint(BaseModel):
     file_path: str
     function_name: str = ""
@@ -83,7 +73,7 @@ class ArchitectureSummary(BaseModel):
 
 class MermaidDiagram(BaseModel):
     title: str
-    diagram_type: str = "file_flow"  # file_flow | function_flow | entry_point_flow
+    diagram_type: str = "file_flow"
     mermaid_syntax: str = ""
 
 
@@ -94,5 +84,5 @@ class FullAnalysisReport(BaseModel):
     file_analyses: list[FileAnalysisResult] = Field(default_factory=list)
     architecture_summary: ArchitectureSummary = Field(default_factory=ArchitectureSummary)
     mermaid_diagrams: list[MermaidDiagram] = Field(default_factory=list)
-    status: str = "pending"  # pending | processing | completed | failed
+    status: str = "pending"
     error_message: str | None = None
