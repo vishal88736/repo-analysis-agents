@@ -86,3 +86,42 @@ class FullAnalysisReport(BaseModel):
     mermaid_diagrams: list[MermaidDiagram] = Field(default_factory=list)
     status: str = "pending"
     error_message: str | None = None
+
+
+# --- Feature 1: Repo Map ---
+
+class RepoFileInfo(BaseModel):
+    language: str = "unknown"
+    size: int = 0
+    tokens_estimate: int = 0
+    file_type: str = ""
+
+
+class RepoMap(BaseModel):
+    """Repository map: file paths → metadata for context-efficient reasoning."""
+    files: dict[str, RepoFileInfo] = Field(default_factory=dict)
+    total_files: int = 0
+    total_tokens_estimate: int = 0
+
+
+# --- Feature 2: Compact File Summaries ---
+
+class CompactFileSummary(BaseModel):
+    """Compact structured summary for progressive context loading."""
+    file_path: str
+    purpose: str = ""
+    functions: list[str] = Field(default_factory=list)
+    classes: list[str] = Field(default_factory=list)
+    imports: list[str] = Field(default_factory=list)
+    key_dependencies: list[str] = Field(default_factory=list)
+    entry_points: list[str] = Field(default_factory=list)
+
+
+# --- Feature 11: Query Plan ---
+
+class QueryPlan(BaseModel):
+    """Plan produced by the query planner before retrieval."""
+    relevant_files: list[str] = Field(default_factory=list)
+    relevant_modules: list[str] = Field(default_factory=list)
+    search_keywords: list[str] = Field(default_factory=list)
+    graph_entry_points: list[str] = Field(default_factory=list)

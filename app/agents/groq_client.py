@@ -10,12 +10,13 @@ Features:
   - asyncio.Semaphore for concurrency control
   - Token usage tracking across all calls
   - Structured JSON output with Pydantic validation
-  - Model selection (heavy model for analysis, fast model for simple tasks)
+  - Feature 7: Task-based model routing (TaskType enum + get_model_for_task)
 """
 
 import json
 import logging
 import asyncio
+from enum import Enum
 from typing import TypeVar, Type
 
 from groq import AsyncGroq, RateLimitError, APITimeoutError, APIConnectionError, APIStatusError
@@ -33,6 +34,32 @@ from app.core.exceptions import LLMError, LLMRateLimitError, LLMResponseValidati
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
+
+
+# Feature 7: Task type enum for model routing
+class TaskType(Enum):
+    FILE_ANALYSIS = "file_analysis"
+    ARCHITECTURE_REASONING = "architecture_reasoning"
+    QUERY_PLANNING = "query_planning"
+    RAG_ANSWER = "rag_answer"
+    MERMAID_GENERATION = "mermaid_generation"
+    CONTEXT_COMPRESSION = "context_compression"
+
+
+# Feature 7: Task → Groq model routing table
+_TASK_MODEL_MAP: dict[TaskType, str] = {
+    TaskType.FILE_ANALYSIS: "llama-3.1-8b-instant",
+    TaskType.ARCHITECTURE_REASONING: "llama-3.3-70b-versatile",
+    TaskType.QUERY_PLANNING: "llama-3.3-70b-versatile",
+    TaskType.RAG_ANSWER: "llama-3.3-70b-versatile",
+    TaskType.MERMAID_GENERATION: "llama-3.1-8b-instant",
+    TaskType.CONTEXT_COMPRESSION: "llama-3.1-8b-instant",
+}
+
+
+def get_model_for_task(task: TaskType) -> str:
+    """Return the appropriate Groq model name for a given task."""
+    return _TASK_MODEL_MAP.get(task, settings.groq_model)
 
 
 class TokenUsageTracker:
@@ -95,6 +122,10 @@ class GroqClient:
         self._client = AsyncGroq(api_key=self._api_key)
         self._semaphore = asyncio.Semaphore(self._max_concurrent)
         self.token_usage = TokenUsageTracker()
+
+    def get_model_for_task(self, task: TaskType) -> str:
+        """Return the appropriate model name for a task type."""
+        return get_model_for_task(task)
 
     @retry(
         retry=retry_if_exception_type((RateLimitError, APITimeoutError, APIConnectionError)),
@@ -175,19 +206,23 @@ class GroqClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
         use_fast_model: bool = False,
+        task: TaskType | None = None,
     ) -> str:
         """
         Simple chat completion. Returns raw string.
 
         Args:
-            use_fast_model: If True, uses the smaller/faster model (e.g., llama-3.1-8b-instant)
-                           for simpler tasks like Mermaid generation.
+            use_fast_model: If True, uses the smaller/faster model.
+            task: If provided, routes to the appropriate model via TaskType routing.
         """
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ]
-        model = self._fast_model if use_fast_model else self._model
+        if task is not None:
+            model = self.get_model_for_task(task)
+        else:
+            model = self._fast_model if use_fast_model else self._model
         content, _, _ = await self._call_api(messages, model=model, temperature=temperature, max_tokens=max_tokens)
         return content
 
@@ -199,6 +234,7 @@ class GroqClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
         use_fast_model: bool = False,
+        task: TaskType | None = None,
     ) -> T:
         """
         Chat completion with structured JSON output validated against a Pydantic model.
@@ -221,7 +257,10 @@ class GroqClient:
             {"role": "user", "content": prompt},
         ]
 
-        model = self._fast_model if use_fast_model else self._model
+        if task is not None:
+            model = self.get_model_for_task(task)
+        else:
+            model = self._fast_model if use_fast_model else self._model
 
         content, _, _ = await self._call_api(
             messages,

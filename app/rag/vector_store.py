@@ -4,6 +4,8 @@ RAG vector store using ChromaDB with local sentence-transformer embeddings.
 Groq doesn't provide a general-purpose embedding endpoint like OpenAI,
 so we use sentence-transformers (all-MiniLM-L6-v2) locally for embeddings.
 This is fast, free, and works offline.
+
+Feature 9: Uses SmartChunker for code-aware chunking instead of naive text splitting.
 """
 
 import logging
@@ -16,8 +18,12 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 
 from app.config import settings
 from app.schemas.analysis import FileAnalysisResult, ArchitectureSummary
+from app.services.smart_chunker import SmartChunker
+from app.schemas.analysis import ParsedStructure
 
 logger = logging.getLogger(__name__)
+
+_smart_chunker = SmartChunker()
 
 
 class VectorStore:
@@ -44,6 +50,7 @@ class VectorStore:
         )
 
     def _chunk_text(self, text: str, max_size: int | None = None) -> list[str]:
+        """Naive text chunking (fallback for non-code content)."""
         max_size = max_size or settings.rag_chunk_size
         overlap = settings.rag_chunk_overlap
         if len(text) <= max_size:
@@ -64,7 +71,15 @@ class VectorStore:
         analysis_id: str,
         file_analyses: list[FileAnalysisResult],
         architecture_summary: ArchitectureSummary,
+        parsed_structures: dict[str, ParsedStructure] | None = None,
+        raw_contents: dict[str, str] | None = None,
     ) -> int:
+        """
+        Index analysis results into ChromaDB.
+
+        Feature 9: Uses SmartChunker for code-aware chunking when
+        parsed structures and raw contents are provided.
+        """
         collection = self._get_or_create_collection(analysis_id)
 
         documents, metadatas, ids = [], [], []
@@ -78,11 +93,34 @@ class VectorStore:
 
         # File summaries + functions + classes
         for fa in file_analyses:
-            if fa.summary:
-                for i, chunk in enumerate(self._chunk_text(fa.summary)):
-                    ids.append(self._make_id("file", fa.file_path, str(i)))
-                    documents.append(f"File: {fa.file_path}\n{chunk}")
-                    metadatas.append({"type": "file_summary", "file_path": fa.file_path, "chunk_index": i})
+            # Feature 9: Smart chunking for raw code when available
+            if raw_contents and fa.file_path in raw_contents:
+                parsed = (parsed_structures or {}).get(fa.file_path, ParsedStructure())
+                raw = raw_contents[fa.file_path]
+                smart_chunks = _smart_chunker.chunk_file(
+                    content=raw,
+                    parsed=parsed,
+                    file_path=fa.file_path,
+                    # rag_chunk_size is in chars; divide by 4 to convert to token estimate (~4 chars/token)
+                    max_chunk_tokens=settings.rag_chunk_size // 4,
+                )
+                for i, chunk in enumerate(smart_chunks):
+                    chunk_text = f"File: {fa.file_path}\n{chunk['text']}"
+                    ids.append(self._make_id("smart", fa.file_path, str(i)))
+                    documents.append(chunk_text)
+                    metadatas.append({
+                        "type": chunk.get("type", "module"),
+                        "file_path": fa.file_path,
+                        "chunk_index": i,
+                        "chunk_name": chunk.get("name", ""),
+                    })
+            else:
+                # Fallback: naive summary chunking
+                if fa.summary:
+                    for i, chunk in enumerate(self._chunk_text(fa.summary)):
+                        ids.append(self._make_id("file", fa.file_path, str(i)))
+                        documents.append(f"File: {fa.file_path}\n{chunk}")
+                        metadatas.append({"type": "file_summary", "file_path": fa.file_path, "chunk_index": i})
 
             for func in fa.functions:
                 text = f"Function `{func.name}` in {fa.file_path}: {func.description}"

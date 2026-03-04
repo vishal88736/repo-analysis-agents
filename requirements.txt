@@ -30,6 +30,9 @@ sentence-transformers==3.3.1
 # === Git ===
 gitpython==3.1.44
 
+# === Multi-LLM Support ===
+google-generativeai>=0.8.0
+
 # === Utilities ===
 orjson==3.10.12
 httpx==0.28.1

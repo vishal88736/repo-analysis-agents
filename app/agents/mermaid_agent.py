@@ -1,12 +1,14 @@
 """
 Mermaid Flowchart Generator Agent — creates diagrams via Groq.
-Uses the fast model (Llama 3.1 8B) since diagram generation is simpler.
+
+Feature 7: Uses MERMAID_GENERATION task type (fast model).
+Feature 14: Accepts optional LLM router.
 """
 
 import json
 import logging
 
-from app.agents.groq_client import GroqClient
+from app.agents.groq_client import GroqClient, TaskType
 from app.schemas.analysis import MermaidDiagram, FileAnalysisResult
 from app.schemas.graph_models import DependencyGraph
 
@@ -58,7 +60,9 @@ Create a `graph TD` diagram showing key file dependencies. Max 50 nodes. Short f
 """
 
     try:
-        content = await groq.chat(prompt, MERMAID_SYSTEM_PROMPT, use_fast_model=True)
+        content = await groq.chat(
+            prompt, MERMAID_SYSTEM_PROMPT, task=TaskType.MERMAID_GENERATION
+        )
         return MermaidDiagram(
             title="File Dependency Flow",
             diagram_type="file_flow",
@@ -102,7 +106,9 @@ Create a `graph LR` diagram. Max 40 nodes. Use function names as labels.\
 """
 
     try:
-        content = await groq.chat(prompt, MERMAID_SYSTEM_PROMPT, use_fast_model=True)
+        content = await groq.chat(
+            prompt, MERMAID_SYSTEM_PROMPT, task=TaskType.MERMAID_GENERATION
+        )
         return MermaidDiagram(
             title="Function Call Flow",
             diagram_type="function_flow",
@@ -150,7 +156,9 @@ Create a `graph TD` diagram from each entry point showing 2-3 levels of calls. M
 """
 
     try:
-        content = await groq.chat(prompt, MERMAID_SYSTEM_PROMPT, use_fast_model=True)
+        content = await groq.chat(
+            prompt, MERMAID_SYSTEM_PROMPT, task=TaskType.MERMAID_GENERATION
+        )
         return MermaidDiagram(
             title="Entry Point Flow",
             diagram_type="entry_point_flow",

@@ -1,9 +1,12 @@
 """
 RAG Answer Agent — answers codebase questions using retrieved context via Groq.
+
+Feature 5: Integrates progressive context loading for richer answers.
+Feature 7: Uses RAG_ANSWER task type for model routing.
 """
 
 import logging
-from app.agents.groq_client import GroqClient
+from app.agents.groq_client import GroqClient, TaskType
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +29,22 @@ async def answer_query(
     retrieved_chunks: list[dict],
     dependency_context: str = "",
     architecture_summary: str = "",
+    progressive_context: str = "",
 ) -> str:
-    """Answer a user query using RAG context."""
+    """
+    Answer a user query using RAG context.
+
+    Feature 5: Accepts progressive_context for stage-3 raw code snippets.
+    Feature 7: Uses RAG_ANSWER task type for model routing.
+    """
     context_parts = []
 
     if architecture_summary:
         context_parts.append(f"## Architecture Overview\n{architecture_summary}\n")
     if dependency_context:
         context_parts.append(f"## Dependency Context\n{dependency_context}\n")
+    if progressive_context:
+        context_parts.append(f"## Raw Code Context (Progressive Loading)\n{progressive_context}\n")
 
     context_parts.append("## Relevant Code Sections\n")
     for i, chunk in enumerate(retrieved_chunks, 1):
@@ -58,7 +69,13 @@ Provide a clear, well-structured answer referencing specific files and functions
 """
 
     try:
-        return await groq.chat(prompt, RAG_ANSWER_SYSTEM_PROMPT, temperature=0.3, max_tokens=2048)
+        return await groq.chat(
+            prompt,
+            RAG_ANSWER_SYSTEM_PROMPT,
+            temperature=0.3,
+            max_tokens=2048,
+            task=TaskType.RAG_ANSWER,
+        )
     except Exception as e:
         logger.error("RAG answer failed: %s", e)
         return f"Failed to generate answer: {e}"

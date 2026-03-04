@@ -3,7 +3,7 @@ REST API Endpoints:
   POST /analyze       → Start analysis (returns analysis_id)
   GET  /status/{id}   → Check pipeline status
   GET  /report/{id}   → Full report with summaries + diagrams
-  POST /query         → RAG question answering
+  POST /query         → RAG question answering (hybrid retrieval + query planning)
 """
 
 import logging
@@ -17,11 +17,14 @@ from app.schemas.api_models import (
     ReportResponse, StatusResponse, ErrorResponse,
 )
 from app.services.analysis_store import AnalysisStore
-from app.services.orchestrator import run_analysis_pipeline, create_analysis_id
+from app.services.orchestrator import run_analysis_pipeline, create_analysis_id, _build_router
 from app.agents.groq_client import GroqClient
 from app.agents.rag_answer_agent import answer_query
+from app.agents.query_planner import plan_query
+from app.agents.progressive_loader import ProgressiveContextLoader
 from app.graph.dependency_graph import get_dependency_context_for_file
 from app.rag.vector_store import VectorStore
+from app.rag.hybrid_retriever import HybridRetriever
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Analysis"])
@@ -116,7 +119,13 @@ async def query_codebase(
     store: AnalysisStore = Depends(get_analysis_store),
     vector_store: VectorStore = Depends(get_vector_store),
 ):
-    """RAG-based question answering: vector search → context → Groq LLM answer."""
+    """
+    RAG-based question answering using hybrid retrieval + query planning.
+
+    Feature 4: Hybrid retrieval (vector + keyword + graph)
+    Feature 5: Progressive context loading
+    Feature 11/16: Query planning (Gemini if available, else Groq)
+    """
     s = await store.get_status(request.analysis_id)
     if s is None:
         raise HTTPException(status_code=404, detail="Analysis not found.")
@@ -125,9 +134,36 @@ async def query_codebase(
 
     report = await store.load_report(request.analysis_id)
     graph = await store.load_graph(request.analysis_id)
+    repo_map = await store.load_repo_map(request.analysis_id)
+    compact_summaries = await store.load_compact_summaries(request.analysis_id)
 
-    # Step 1: Vector search
-    chunks = await vector_store.search(analysis_id=request.analysis_id, query=request.question)
+    # Set up clients and router
+    groq = GroqClient()
+    router = _build_router(groq)
+    hybrid_retriever = HybridRetriever(vector_store)
+
+    # Feature 11/16: Query planning
+    query_plan = await plan_query(
+        router=router,
+        question=request.question,
+        repo_map=repo_map,
+        file_summaries=compact_summaries,
+        graph=graph,
+    )
+    logger.info(
+        "Query plan: relevant_files=%d | keywords=%s",
+        len(query_plan.relevant_files),
+        query_plan.search_keywords[:5],
+    )
+
+    # Feature 4: Hybrid retrieval
+    chunks = await hybrid_retriever.retrieve(
+        analysis_id=request.analysis_id,
+        query=request.question,
+        top_k=10,
+        graph=graph,
+        file_summaries=compact_summaries if compact_summaries else None,
+    )
 
     # Step 2: Dependency context augmentation
     dep_context = ""
@@ -141,10 +177,22 @@ async def query_codebase(
             get_dependency_context_for_file(graph, fp) for fp in relevant_files
         )
 
+    # Feature 5: Progressive context loading for additional raw code snippets
+    progressive_context = ""
+    if repo_map or compact_summaries:
+        loader = ProgressiveContextLoader(groq=groq)
+        prog_result = await loader.load_context(
+            query=request.question,
+            repo_map=repo_map,
+            summaries=compact_summaries,
+        )
+        progressive_context = prog_result.get("context", "")
+
     # Step 3: Groq LLM answer
-    groq = GroqClient()
     arch = report.architecture_summary.overview if report else ""
-    answer = await answer_query(groq, request.question, chunks, dep_context, arch)
+    answer = await answer_query(
+        groq, request.question, chunks, dep_context, arch, progressive_context
+    )
 
     sources = list({
         c.get("metadata", {}).get("file_path", "")
