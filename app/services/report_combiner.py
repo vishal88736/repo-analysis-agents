@@ -13,6 +13,7 @@ from app.agents.mermaid_agent import (
 from app.graph.dependency_graph import build_dependency_graph
 from app.schemas.analysis import (
     FileAnalysisResult, MermaidDiagram, FullAnalysisReport,
+    RepoMap, CompactFileSummary,
 )
 from app.schemas.graph_models import DependencyGraph
 
@@ -24,14 +25,29 @@ async def combine_and_generate_report(
     analysis_id: str,
     repository_url: str,
     file_analyses: list[FileAnalysisResult],
+    router=None,
+    repo_map: RepoMap | None = None,
+    compact_summaries: list[CompactFileSummary] | None = None,
 ) -> tuple[FullAnalysisReport, DependencyGraph]:
+    """
+    Merge file analyses, build dependency graph, generate architecture summary + diagrams.
+
+    Feature 14/15: Passes router + repo map + compact summaries to architecture agent
+    so Gemini (when available) can use full context.
+    """
     logger.info("Combining %d file reports", len(file_analyses))
 
     # Build dependency graph
     dep_graph = build_dependency_graph(file_analyses)
 
-    # Architecture summary (uses heavy model)
-    arch_summary = await generate_architecture_summary(groq, file_analyses)
+    # Architecture summary — uses LLM router (Gemini if available)
+    arch_summary = await generate_architecture_summary(
+        groq=groq,
+        file_analyses=file_analyses,
+        router=router,
+        repo_map=repo_map,
+        compact_summaries=compact_summaries,
+    )
 
     # Mermaid diagrams (use fast model, run concurrently)
     ep_dicts = [ep.model_dump() for ep in arch_summary.entry_points]

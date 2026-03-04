@@ -1,4 +1,4 @@
-"""Analysis Store — JSON-based persistence for reports and graphs."""
+"""Analysis Store — JSON-based persistence for reports, graphs, repo maps, and compact summaries."""
 
 import logging
 import asyncio
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import orjson
 
-from app.schemas.analysis import FullAnalysisReport
+from app.schemas.analysis import FullAnalysisReport, RepoMap, CompactFileSummary
 from app.schemas.graph_models import DependencyGraph
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,12 @@ class AnalysisStore:
 
     def _graph_path(self, aid: str) -> Path:
         return self._store_dir / f"{aid}_graph.json"
+
+    def _repo_map_path(self, aid: str) -> Path:
+        return self._store_dir / f"{aid}_repo_map.json"
+
+    def _compact_summaries_path(self, aid: str) -> Path:
+        return self._store_dir / f"{aid}_compact_summaries.json"
 
     async def set_status(self, aid: str, status: str):
         async with self._lock:
@@ -66,3 +72,47 @@ class AnalysisStore:
     async def save_error(self, aid: str, url: str, error: str):
         report = FullAnalysisReport(analysis_id=aid, repository_url=url, status="failed", error_message=error)
         await self.save_report(report)
+
+    # --- Feature 1: Repo Map ---
+
+    async def save_repo_map(self, aid: str, repo_map: RepoMap) -> None:
+        """Persist the repository map for an analysis."""
+        self._repo_map_path(aid).write_bytes(
+            orjson.dumps(repo_map.model_dump(), option=orjson.OPT_INDENT_2)
+        )
+
+    async def load_repo_map(self, aid: str) -> RepoMap | None:
+        """Load the repository map for an analysis."""
+        path = self._repo_map_path(aid)
+        if not path.exists():
+            return None
+        try:
+            return RepoMap.model_validate(orjson.loads(path.read_bytes()))
+        except Exception as e:
+            logger.error("Load repo map %s failed: %s", aid, e)
+            return None
+
+    # --- Feature 2: Compact Summaries ---
+
+    async def save_compact_summaries(
+        self, aid: str, summaries: list[CompactFileSummary]
+    ) -> None:
+        """Persist compact file summaries for an analysis."""
+        self._compact_summaries_path(aid).write_bytes(
+            orjson.dumps(
+                [s.model_dump() for s in summaries],
+                option=orjson.OPT_INDENT_2,
+            )
+        )
+
+    async def load_compact_summaries(self, aid: str) -> list[CompactFileSummary]:
+        """Load compact file summaries for an analysis."""
+        path = self._compact_summaries_path(aid)
+        if not path.exists():
+            return []
+        try:
+            raw = orjson.loads(path.read_bytes())
+            return [CompactFileSummary.model_validate(item) for item in raw]
+        except Exception as e:
+            logger.error("Load compact summaries %s failed: %s", aid, e)
+            return []
