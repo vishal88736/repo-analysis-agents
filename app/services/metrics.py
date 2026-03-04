@@ -109,6 +109,8 @@ class MultiProviderMetrics:
         Estimate costs. Groq free tier has no per-token cost.
         Gemini flash: ~$0.075/M input tokens, ~$0.30/M output tokens (approximate).
         """
+        # Gemini 2.0 Flash pricing as of 2024 (may vary by model/region; see https://ai.google.dev/pricing)
+        # Input: $0.075 / 1M tokens, Output: $0.30 / 1M tokens (standard tier)
         gemini_input_cost = self.gemini_usage.prompt_tokens * 0.075 / 1_000_000
         gemini_output_cost = self.gemini_usage.completion_tokens * 0.30 / 1_000_000
         return {

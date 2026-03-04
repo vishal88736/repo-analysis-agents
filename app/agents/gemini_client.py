@@ -101,6 +101,8 @@ class GeminiClient:
         if hasattr(response, "usage_metadata") and response.usage_metadata:
             prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
             completion_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+        else:
+            logger.debug("Gemini response did not include usage_metadata; token counts unavailable")
 
         return text, prompt_tokens, completion_tokens
 

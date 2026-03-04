@@ -8,6 +8,8 @@ Feature 7: Uses FILE_ANALYSIS task type for model routing.
 
 import logging
 
+from app.config import settings
+
 from app.agents.groq_client import GroqClient, TaskType
 from app.schemas.analysis import (
     FileAnalysisResult, FileMetadata, ParsedStructure, CompactFileSummary,
@@ -53,7 +55,7 @@ def _build_file_analysis_prompt(
     parsed: ParsedStructure,
 ) -> str:
     # Feature 10: Compress code before sending to LLM
-    compressed = _compressor.compress_for_prompt(content, metadata.language, max_tokens=1500)
+    compressed = _compressor.compress_for_prompt(content, metadata.language, max_tokens=settings.max_file_tokens)
 
     parsed_info = ""
     if parsed.functions:
@@ -99,7 +101,7 @@ def _build_compact_summary_prompt(
     parsed: ParsedStructure,
 ) -> str:
     # Compress content for compact summary generation
-    compressed = _compressor.compress_for_prompt(content, metadata.language, max_tokens=800)
+    compressed = _compressor.compress_for_prompt(content, metadata.language, max_tokens=settings.max_file_tokens // 2)
 
     function_names = [f.name for f in parsed.functions[:20]]
     class_names = [c.name for c in parsed.classes[:10]]

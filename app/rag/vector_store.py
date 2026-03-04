@@ -101,6 +101,7 @@ class VectorStore:
                     content=raw,
                     parsed=parsed,
                     file_path=fa.file_path,
+                    # rag_chunk_size is in chars; divide by 4 to convert to token estimate (~4 chars/token)
                     max_chunk_tokens=settings.rag_chunk_size // 4,
                 )
                 for i, chunk in enumerate(smart_chunks):
