@@ -1,9 +1,6 @@
 """
 RAG vector store using ChromaDB with local sentence-transformer embeddings.
-
-Groq doesn't provide a general-purpose embedding endpoint like OpenAI,
-so we use sentence-transformers (all-MiniLM-L6-v2) locally for embeddings.
-This is fast, free, and works offline.
+Fixed: duplicate ID collision by using longer hashes + deduplication.
 """
 
 import logging
@@ -27,7 +24,6 @@ class VectorStore:
             path=str(self._persist_dir),
             settings=ChromaSettings(anonymized_telemetry=False),
         )
-        # Local embedding function — no API calls, runs on CPU
         self._embedding_fn = SentenceTransformerEmbeddingFunction(
             model_name=settings.embedding_model,
         )
@@ -57,7 +53,8 @@ class VectorStore:
         return chunks
 
     def _make_id(self, *parts: str) -> str:
-        return hashlib.sha256("::".join(parts).encode()).hexdigest()[:16]
+        """Generate unique ID from parts. Uses 32-char hash to avoid collisions."""
+        return hashlib.sha256("::".join(parts).encode()).hexdigest()[:32]
 
     async def index_analysis(
         self,
@@ -68,21 +65,64 @@ class VectorStore:
         collection = self._get_or_create_collection(analysis_id)
 
         documents, metadatas, ids = [], [], []
+        seen_ids: set[str] = set()
+
+        def _add_doc(doc_id: str, document: str, metadata: dict):
+            """Add document only if ID is unique."""
+            if doc_id in seen_ids:
+                # Append a counter suffix to make it unique
+                counter = 1
+                while f"{doc_id}_{counter}" in seen_ids:
+                    counter += 1
+                doc_id = f"{doc_id}_{counter}"
+            seen_ids.add(doc_id)
+            ids.append(doc_id)
+            documents.append(document)
+            metadatas.append(metadata)
 
         # Architecture summary
         if architecture_summary.overview:
             for i, chunk in enumerate(self._chunk_text(architecture_summary.overview)):
-                ids.append(self._make_id("arch", str(i)))
-                documents.append(chunk)
-                metadatas.append({"type": "architecture_summary", "file_path": "__global__", "chunk_index": i})
+                _add_doc(
+                    self._make_id("arch", "overview", str(i)),
+                    chunk,
+                    {"type": "architecture_summary", "file_path": "__global__", "chunk_index": i},
+                )
+
+        # Component interaction summary
+        if architecture_summary.component_interaction_summary:
+            for i, chunk in enumerate(self._chunk_text(architecture_summary.component_interaction_summary)):
+                _add_doc(
+                    self._make_id("arch", "component_interaction", str(i)),
+                    chunk,
+                    {"type": "component_interaction", "file_path": "__global__", "chunk_index": i},
+                )
+
+        # Execution flow summary
+        if architecture_summary.execution_flow and architecture_summary.execution_flow.summary:
+            _add_doc(
+                self._make_id("arch", "execution_flow"),
+                architecture_summary.execution_flow.summary,
+                {"type": "execution_flow", "file_path": "__global__", "chunk_index": 0},
+            )
+
+        # Data flow summary
+        if architecture_summary.data_flow and architecture_summary.data_flow.summary:
+            _add_doc(
+                self._make_id("arch", "data_flow"),
+                architecture_summary.data_flow.summary,
+                {"type": "data_flow", "file_path": "__global__", "chunk_index": 0},
+            )
 
         # File summaries + functions + classes
         for fa in file_analyses:
             if fa.summary:
                 for i, chunk in enumerate(self._chunk_text(fa.summary)):
-                    ids.append(self._make_id("file", fa.file_path, str(i)))
-                    documents.append(f"File: {fa.file_path}\n{chunk}")
-                    metadatas.append({"type": "file_summary", "file_path": fa.file_path, "chunk_index": i})
+                    _add_doc(
+                        self._make_id("file", fa.file_path, "summary", str(i)),
+                        f"File: {fa.file_path}\n{chunk}",
+                        {"type": "file_summary", "file_path": fa.file_path, "chunk_index": i},
+                    )
 
             for func in fa.functions:
                 text = f"Function `{func.name}` in {fa.file_path}: {func.description}"
@@ -90,24 +130,44 @@ class VectorStore:
                     text += f"\nCalls: {', '.join(func.calls)}"
                 if func.imports_used:
                     text += f"\nUses: {', '.join(func.imports_used)}"
-                ids.append(self._make_id("func", fa.file_path, func.name))
-                documents.append(text)
-                metadatas.append({"type": "function", "file_path": fa.file_path, "function_name": func.name})
+                _add_doc(
+                    self._make_id("func", fa.file_path, func.name),
+                    text,
+                    {"type": "function", "file_path": fa.file_path, "function_name": func.name},
+                )
 
             for cls in fa.classes:
                 text = f"Class `{cls.name}` in {fa.file_path}. Methods: {', '.join(cls.methods)}"
-                ids.append(self._make_id("cls", fa.file_path, cls.name))
-                documents.append(text)
-                metadatas.append({"type": "class", "file_path": fa.file_path, "class_name": cls.name})
+                _add_doc(
+                    self._make_id("cls", fa.file_path, cls.name),
+                    text,
+                    {"type": "class", "file_path": fa.file_path, "class_name": cls.name},
+                )
+
+            # Index file interactions for RAG retrieval
+            for inter in fa.file_interactions:
+                text = (
+                    f"File interaction: {inter.source_file} --[{inter.interaction_type}]--> "
+                    f"{inter.target_file}: {inter.description}"
+                )
+                _add_doc(
+                    self._make_id("interaction", inter.source_file, inter.target_file, inter.interaction_type),
+                    text,
+                    {"type": "file_interaction", "file_path": inter.source_file},
+                )
 
         # Batch upsert
         if documents:
             batch_size = 500
             for i in range(0, len(documents), batch_size):
                 end = min(i + batch_size, len(documents))
-                collection.upsert(ids=ids[i:end], documents=documents[i:end], metadatas=metadatas[i:end])
+                collection.upsert(
+                    ids=ids[i:end],
+                    documents=documents[i:end],
+                    metadatas=metadatas[i:end],
+                )
 
-        logger.info("Indexed %d documents for analysis %s", len(documents), analysis_id)
+        logger.info("Indexed %d documents for analysis %s (unique IDs verified)", len(documents), analysis_id)
         return len(documents)
 
     async def search(
