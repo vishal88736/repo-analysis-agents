@@ -1,6 +1,4 @@
-"""
-REST API — with hybrid retrieval (F4) and query planning (F11).
-"""
+"""REST API — exposes execution flow, data flow, tech profile, component interactions."""
 
 import logging
 
@@ -77,16 +75,18 @@ async def get_report(analysis_id: str, store: AnalysisStore = Depends(get_analys
     if report.status == "failed":
         raise HTTPException(status_code=500, detail=f"Analysis failed: {report.error_message}")
 
+    arch = report.architecture_summary
+
     return ReportResponse(
         analysis_id=report.analysis_id,
         repository_url=report.repository_url,
         status=report.status,
         total_files=report.total_files,
-        global_summary=report.architecture_summary.overview,
-        key_components=report.architecture_summary.key_components,
-        design_patterns=report.architecture_summary.design_patterns,
-        technology_stack=report.architecture_summary.technology_stack,
-        entry_points=[ep.model_dump() for ep in report.architecture_summary.entry_points],
+        global_summary=arch.overview,
+        key_components=arch.key_components,
+        design_patterns=arch.design_patterns,
+        technology_stack=arch.technology_stack,
+        entry_points=[ep.model_dump() for ep in arch.entry_points],
         file_summaries=[
             {
                 "file_path": fa.file_path,
@@ -94,6 +94,8 @@ async def get_report(analysis_id: str, store: AnalysisStore = Depends(get_analys
                 "functions": len(fa.functions),
                 "classes": len(fa.classes),
                 "dependencies": fa.external_dependencies,
+                "internal_references": fa.internal_file_references,
+                "interactions": [i.model_dump() for i in fa.file_interactions],
             }
             for fa in report.file_analyses
         ],
@@ -101,6 +103,12 @@ async def get_report(analysis_id: str, store: AnalysisStore = Depends(get_analys
             {"title": d.title, "type": d.diagram_type, "syntax": d.mermaid_syntax}
             for d in report.mermaid_diagrams
         ],
+        # NEW fields
+        technology_profile=arch.technology_profile.model_dump(),
+        file_interactions=[i.model_dump() for i in arch.file_interactions],
+        execution_flow=arch.execution_flow.model_dump(),
+        data_flow=arch.data_flow.model_dump(),
+        component_interaction_summary=arch.component_interaction_summary,
     )
 
 
@@ -110,7 +118,6 @@ async def query_codebase(
     store: AnalysisStore = Depends(get_analysis_store),
     vector_store: VectorStore = Depends(get_vector_store),
 ):
-    """RAG query with hybrid retrieval + query planning + progressive loading."""
     s = await store.get_status(request.analysis_id)
     if s is None:
         raise HTTPException(status_code=404, detail="Analysis not found.")
@@ -125,11 +132,8 @@ async def query_codebase(
     groq = GroqClient()
     llm_router = LLMRouter(groq)
 
-    # Feature 11: Query planning
     query_plan = await plan_query(llm_router, request.question, repo_map, compact_summaries)
-    logger.info("Query plan: %d relevant files, needs_code=%s", len(query_plan.relevant_files), query_plan.needs_raw_code)
 
-    # Feature 4: Hybrid retrieval
     chunks = await hybrid_retrieve(
         vector_store=vector_store,
         analysis_id=request.analysis_id,
@@ -138,7 +142,6 @@ async def query_codebase(
         graph=graph,
     )
 
-    # Dependency context
     dep_context = ""
     if graph and chunks:
         relevant_files = {
@@ -150,7 +153,6 @@ async def query_codebase(
             get_dependency_context_for_file(graph, fp) for fp in relevant_files
         )
 
-    # Feature 5: Progressive loading answer
     arch = report.architecture_summary.overview if report else ""
     answer = await answer_query(
         router=llm_router,

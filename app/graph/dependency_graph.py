@@ -1,4 +1,4 @@
-"""Dependency graph builder from file analysis results."""
+"""Dependency graph builder — uses file_interactions for accurate edges."""
 
 import logging
 import os
@@ -34,8 +34,10 @@ def build_dependency_graph(file_analyses: list[FileAnalysisResult]) -> Dependenc
     file_funcs: dict[str, set[str]] = {}
 
     for fa in file_analyses:
-        nodes.append(DependencyNode(id=fa.file_path, type="file",
-                                     label=os.path.basename(fa.file_path), file_path=fa.file_path))
+        nodes.append(DependencyNode(
+            id=fa.file_path, type="file",
+            label=os.path.basename(fa.file_path), file_path=fa.file_path,
+        ))
         funcs = set()
         for func in fa.functions:
             fid = f"{fa.file_path}::{func.name}"
@@ -47,13 +49,47 @@ def build_dependency_graph(file_analyses: list[FileAnalysisResult]) -> Dependenc
             cid = f"{fa.file_path}::{cls.name}"
             nodes.append(DependencyNode(id=cid, type="class", label=cls.name, file_path=fa.file_path))
 
+    # === NEW: Add edges from file_interactions (most accurate) ===
+    seen_file_edges = set()
+    for fa in file_analyses:
+        for inter in fa.file_interactions:
+            src = inter.source_file
+            tgt = inter.target_file
+            if src in all_paths and tgt in all_paths and src != tgt:
+                edge_key = (src, tgt, inter.interaction_type)
+                if edge_key not in seen_file_edges:
+                    seen_file_edges.add(edge_key)
+                    edges.append(DependencyEdge(
+                        source=src, target=tgt,
+                        relationship=inter.interaction_type or "imports",
+                    ))
+                    adjacency[src].append(tgt)
+
+    # Also add edges from internal_file_references (backup)
+    for fa in file_analyses:
+        for ref in fa.internal_file_references:
+            if ref in all_paths and ref != fa.file_path:
+                edge_key = (fa.file_path, ref, "references")
+                if edge_key not in seen_file_edges:
+                    seen_file_edges.add(edge_key)
+                    edges.append(DependencyEdge(
+                        source=fa.file_path, target=ref, relationship="references",
+                    ))
+                    adjacency[fa.file_path].append(ref)
+
+    # Legacy: external_dependencies import resolution
     for fa in file_analyses:
         for dep in fa.external_dependencies:
             target = _resolve_import(dep, all_paths)
             if target and target != fa.file_path:
-                edges.append(DependencyEdge(source=fa.file_path, target=target, relationship="imports"))
-                adjacency[fa.file_path].append(target)
+                edge_key = (fa.file_path, target, "imports")
+                if edge_key not in seen_file_edges:
+                    seen_file_edges.add(edge_key)
+                    edges.append(DependencyEdge(source=fa.file_path, target=target, relationship="imports"))
+                    adjacency[fa.file_path].append(target)
 
+    # Function-level call edges
+    for fa in file_analyses:
         for func in fa.functions:
             caller_id = f"{fa.file_path}::{func.name}"
             for called in func.calls:
@@ -64,7 +100,8 @@ def build_dependency_graph(file_analyses: list[FileAnalysisResult]) -> Dependenc
                         adjacency[caller_id].append(callee_id)
                         break
 
-    logger.info("Dependency graph: %d nodes, %d edges", len(nodes), len(edges))
+    logger.info("Dependency graph: %d nodes, %d edges (file_interactions=%d)",
+                len(nodes), len(edges), len(seen_file_edges))
     return DependencyGraph(nodes=nodes, edges=edges, adjacency_list=dict(adjacency))
 
 

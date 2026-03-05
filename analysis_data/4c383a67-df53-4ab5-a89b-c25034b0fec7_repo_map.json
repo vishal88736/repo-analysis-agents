@@ -1,0 +1,42 @@
+{
+  "files": {
+    "background.js": {
+      "language": "JavaScript",
+      "size_bytes": 698,
+      "tokens_estimate": 174,
+      "extension": ".js",
+      "directory": "."
+    },
+    "content.js": {
+      "language": "JavaScript",
+      "size_bytes": 6818,
+      "tokens_estimate": 1704,
+      "extension": ".js",
+      "directory": "."
+    },
+    "manifest.json": {
+      "language": "JSON",
+      "size_bytes": 544,
+      "tokens_estimate": 136,
+      "extension": ".json",
+      "directory": "."
+    },
+    "README.md": {
+      "language": "Markdown",
+      "size_bytes": 3893,
+      "tokens_estimate": 973,
+      "extension": ".md",
+      "directory": "."
+    }
+  },
+  "total_files": 4,
+  "total_tokens_estimate": 2987,
+  "languages": {
+    "JavaScript": 2,
+    "JSON": 1,
+    "Markdown": 1
+  },
+  "directory_tree": [
+    "."
+  ]
+}

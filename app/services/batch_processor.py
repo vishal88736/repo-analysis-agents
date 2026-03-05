@@ -1,5 +1,5 @@
 """
-Batch Processor — with token budgeting (F3) and caching (F8).
+Batch Processor — passes project file list for cross-file dependency detection.
 """
 
 import logging
@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 def _build_compact_summary(fa: FileAnalysisResult) -> CompactFileSummary:
-    """Feature 2: Build compact summary from full analysis."""
     return CompactFileSummary(
         file_path=fa.file_path,
         purpose=fa.summary[:200] if fa.summary else "",
@@ -38,8 +37,8 @@ async def _process_single_file(
     repo_path: Path,
     metadata: FileMetadata,
     cache: AnalysisCache,
+    all_project_files: list[str],
 ) -> tuple[FileAnalysisResult | None, CompactFileSummary | None]:
-    """Read → Cache check → Compress → Parse → Analyze."""
     file_path = repo_path / metadata.path
 
     try:
@@ -49,7 +48,7 @@ async def _process_single_file(
         logger.warning("Failed to read %s: %s", metadata.path, e)
         return None, None
 
-    # Feature 8: Check cache
+    # Check cache
     content_hash = AnalysisCache.hash_content(content_bytes)
     cached = cache.get(content_hash)
     if cached:
@@ -59,17 +58,14 @@ async def _process_single_file(
             summary = _build_compact_summary(cached)
         return cached, summary
 
-    # Feature 10: Compress before analysis
+    # Compress
     compressed = compress_code(content_text, metadata.language)
 
-    # Feature 3: Token budgeting
+    # Token budgeting
     tokens = estimate_tokens(compressed)
     if tokens > settings.max_file_tokens:
-        # Split into chunks and analyze separately
         chunks = split_by_token_budget(compressed, settings.max_file_tokens)
         logger.info("Splitting %s into %d chunks (%d tokens)", metadata.path, len(chunks), tokens)
-
-        # Analyze first chunk (most important — imports, class defs)
         parsed = parse_file(metadata.path, content_bytes, metadata.extension)
         result = await analyze_file(
             groq=groq,
@@ -77,9 +73,8 @@ async def _process_single_file(
             content=chunks[0],
             metadata=metadata,
             parsed=parsed,
+            all_project_files=all_project_files,
         )
-
-        # Add note about truncation
         if result and len(chunks) > 1:
             result.summary += f" [Analyzed first {settings.max_file_tokens} tokens of {tokens} total]"
     else:
@@ -90,11 +85,11 @@ async def _process_single_file(
             content=compressed,
             metadata=metadata,
             parsed=parsed,
+            all_project_files=all_project_files,
         )
 
     if result:
         summary = _build_compact_summary(result)
-        # Feature 8: Store in cache
         cache.put(content_hash, result, summary)
         return result, summary
 
@@ -108,13 +103,12 @@ async def process_files_in_batches(
     batch_size: int | None = None,
     cache: AnalysisCache | None = None,
 ) -> tuple[list[FileAnalysisResult], list[CompactFileSummary]]:
-    """
-    Process files with caching + token budgets.
-    Returns both full analyses and compact summaries.
-    """
     batch_size = batch_size or settings.batch_size
     if cache is None:
         cache = AnalysisCache()
+
+    # Build complete project file list for cross-reference detection
+    all_project_files = [f.path for f in files]
 
     total = len(files)
     results: list[FileAnalysisResult] = []
@@ -132,7 +126,10 @@ async def process_files_in_batches(
         batch_num = idx + 1
         logger.info("Batch %d/%d (%d files)", batch_num, len(batches), len(batch))
 
-        tasks = [_process_single_file(groq, repo_path, m, cache) for m in batch]
+        tasks = [
+            _process_single_file(groq, repo_path, m, cache, all_project_files)
+            for m in batch
+        ]
         batch_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for i, result in enumerate(batch_results):
@@ -150,8 +147,12 @@ async def process_files_in_batches(
 
         logger.info("Batch %d done | processed=%d | failed=%d", batch_num, len(results), failed)
 
+    # Log inter-file dependency stats
+    total_refs = sum(len(r.internal_file_references) for r in results)
+    total_interactions = sum(len(r.file_interactions) for r in results)
     logger.info(
-        "All batches complete | total=%d | success=%d | failed=%d | cache=%s | tokens=%s",
-        total, len(results), failed, cache.stats(), groq.token_usage.summary(),
+        "All batches complete | total=%d | success=%d | failed=%d | "
+        "file_refs=%d | interactions=%d | cache=%s",
+        total, len(results), failed, total_refs, total_interactions, cache.stats(),
     )
     return results, summaries

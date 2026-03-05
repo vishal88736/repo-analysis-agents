@@ -1,4 +1,4 @@
-"""Report Combiner — uses LLM router for multi-provider support."""
+"""Report Combiner — generates all diagrams including component interaction."""
 
 import logging
 import asyncio
@@ -10,6 +10,7 @@ from app.agents.mermaid_agent import (
     generate_file_flow_diagram,
     generate_function_flow_diagram,
     generate_entry_point_diagram,
+    generate_component_interaction_diagram,
 )
 from app.graph.dependency_graph import build_dependency_graph
 from app.schemas.analysis import (
@@ -34,15 +35,17 @@ async def combine_and_generate_report(
 
     dep_graph = build_dependency_graph(file_analyses)
 
-    # Architecture summary via router (may use Gemini for large context)
+    # Architecture summary with execution flow, data flow, tech profile
     arch_summary = await generate_architecture_summary(router, file_analyses)
 
     ep_dicts = [ep.model_dump() for ep in arch_summary.entry_points]
 
+    # Generate all 4 diagram types
     diagrams_raw = await asyncio.gather(
         generate_file_flow_diagram(router, dep_graph, file_analyses),
         generate_function_flow_diagram(router, file_analyses),
         generate_entry_point_diagram(router, file_analyses, ep_dicts),
+        generate_component_interaction_diagram(router, arch_summary, file_analyses),
         return_exceptions=True,
     )
 
@@ -60,5 +63,5 @@ async def combine_and_generate_report(
         status="completed",
     )
 
-    logger.info("Report generated for %s", analysis_id)
+    logger.info("Report generated for %s (%d diagrams)", analysis_id, len(diagrams))
     return report, dep_graph

@@ -1,0 +1,55 @@
+[
+  {
+    "file_path": "background.js",
+    "purpose": "This file listens for the chrome action click event and executes scripts on the current tab if it's the IIIT-NR ERP portal. It injects jspdf and content scripts into the page.",
+    "functions": [
+      "(anonymous function)"
+    ],
+    "classes": [],
+    "imports": [
+      "chrome",
+      "jspdf"
+    ],
+    "key_dependencies": [
+      "chrome",
+      "jspdf"
+    ],
+    "entry_point": false
+  },
+  {
+    "file_path": "content.js",
+    "purpose": "This file generates an academic result report in PDF format by fetching data from the ERP portal and processing it. It uses the jsPDF library to create the PDF document. The report includes semester i",
+    "functions": [
+      "setProgress",
+      "finishProgress",
+      "safeFetchJSON",
+      "calculateTotal"
+    ],
+    "classes": [],
+    "imports": [
+      "jsPDF"
+    ],
+    "key_dependencies": [
+      "jsPDF"
+    ],
+    "entry_point": false
+  },
+  {
+    "file_path": "manifest.json",
+    "purpose": "This file is a JSON manifest for a browser extension, specifying its metadata, permissions, and functionality. It declares the extension's name, version, and permissions, as well as its background scr",
+    "functions": [],
+    "classes": [],
+    "imports": [],
+    "key_dependencies": [],
+    "entry_point": false
+  },
+  {
+    "file_path": "README.md",
+    "purpose": "This is a README file for a Chrome extension that extracts academic results from the IIIT-NR ERP portal and exports them as a clean, well-formatted PDF transcript. The file provides information about ",
+    "functions": [],
+    "classes": [],
+    "imports": [],
+    "key_dependencies": [],
+    "entry_point": false
+  }
+]

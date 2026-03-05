@@ -1,0 +1,68 @@
+{
+  "analysis": {
+    "file_path": "content.js",
+    "summary": "This file generates an academic result report in PDF format by fetching data from the ERP portal and processing it. It uses the jsPDF library to create the PDF document. The report includes semester information, course details, and assignment grades.",
+    "functions": [
+      {
+        "name": "setProgress",
+        "description": "Updates the progress bar and text",
+        "calls": [
+          "bar.style.width",
+          "text.textContent"
+        ],
+        "imports_used": []
+      },
+      {
+        "name": "finishProgress",
+        "description": "Finishes the progress bar and removes the HUD after a delay",
+        "calls": [
+          "setProgress",
+          "setTimeout",
+          "hud.remove"
+        ],
+        "imports_used": []
+      },
+      {
+        "name": "safeFetchJSON",
+        "description": "Fetches JSON data from a URL and throws an error if the response is not OK",
+        "calls": [
+          "fetch",
+          "res.json"
+        ],
+        "imports_used": []
+      },
+      {
+        "name": "calculateTotal",
+        "description": "Calculates the total value of an array of assignments",
+        "calls": [
+          "parseFloat",
+          "isNaN"
+        ],
+        "imports_used": []
+      }
+    ],
+    "classes": [],
+    "exports": [],
+    "external_dependencies": [
+      "jsPDF"
+    ]
+  },
+  "summary": {
+    "file_path": "content.js",
+    "purpose": "This file generates an academic result report in PDF format by fetching data from the ERP portal and processing it. It uses the jsPDF library to create the PDF document. The report includes semester i",
+    "functions": [
+      "setProgress",
+      "finishProgress",
+      "safeFetchJSON",
+      "calculateTotal"
+    ],
+    "classes": [],
+    "imports": [
+      "jsPDF"
+    ],
+    "key_dependencies": [
+      "jsPDF"
+    ],
+    "entry_point": false
+  }
+}

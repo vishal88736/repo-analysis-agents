@@ -41,6 +41,12 @@ class ReportResponse(BaseModel):
     entry_points: list[dict]
     file_summaries: list[dict]
     mermaid_diagrams: list[dict]
+    # NEW fields
+    technology_profile: dict = Field(default_factory=dict)
+    file_interactions: list[dict] = Field(default_factory=list)
+    execution_flow: dict = Field(default_factory=dict)
+    data_flow: dict = Field(default_factory=dict)
+    component_interaction_summary: str = ""
 
 
 class StatusResponse(BaseModel):

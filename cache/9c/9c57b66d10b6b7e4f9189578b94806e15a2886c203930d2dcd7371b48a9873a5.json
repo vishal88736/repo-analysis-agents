@@ -1,0 +1,19 @@
+{
+  "analysis": {
+    "file_path": "manifest.json",
+    "summary": "This file is a JSON manifest for a browser extension, specifying its metadata, permissions, and functionality. It declares the extension's name, version, and permissions, as well as its background script and action. The extension appears to be designed to export academic results from the IIIT-NR ERP system to PDF.",
+    "functions": [],
+    "classes": [],
+    "exports": [],
+    "external_dependencies": []
+  },
+  "summary": {
+    "file_path": "manifest.json",
+    "purpose": "This file is a JSON manifest for a browser extension, specifying its metadata, permissions, and functionality. It declares the extension's name, version, and permissions, as well as its background scr",
+    "functions": [],
+    "classes": [],
+    "imports": [],
+    "key_dependencies": [],
+    "entry_point": false
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "analysis": {
+    "file_path": "background.js",
+    "summary": "This file listens for the chrome action click event and executes scripts on the current tab if it's the IIIT-NR ERP portal. It injects jspdf and content scripts into the page.",
+    "functions": [
+      {
+        "name": "(anonymous function)",
+        "description": "Handles the chrome action click event",
+        "calls": [
+          "chrome.scripting.executeScript"
+        ],
+        "imports_used": [
+          "chrome"
+        ]
+      }
+    ],
+    "classes": [],
+    "exports": [],
+    "external_dependencies": [
+      "chrome",
+      "jspdf"
+    ]
+  },
+  "summary": {
+    "file_path": "background.js",
+    "purpose": "This file listens for the chrome action click event and executes scripts on the current tab if it's the IIIT-NR ERP portal. It injects jspdf and content scripts into the page.",
+    "functions": [
+      "(anonymous function)"
+    ],
+    "classes": [],
+    "imports": [
+      "chrome",
+      "jspdf"
+    ],
+    "key_dependencies": [
+      "chrome",
+      "jspdf"
+    ],
+    "entry_point": false
+  }
+}

@@ -1,0 +1,233 @@
+{
+  "analysis_id": "4dfbb641-0a68-4f2f-8338-f9d15559de7b",
+  "repository_url": "https://github.com/DeV-433/erp-result-exporter",
+  "total_files": 4,
+  "file_analyses": [
+    {
+      "file_path": "background.js",
+      "summary": "This file listens for the chrome action click event and executes scripts on the current tab if it's on the IIIT-NR ERP portal. It injects jspdf and content scripts into the tab.",
+      "functions": [
+        {
+          "name": "(anonymous)",
+          "description": "Handles the chrome action click event",
+          "calls": [
+            "chrome.scripting.executeScript",
+            "chrome.action.onClicked.addListener"
+          ],
+          "imports_used": [
+            "chrome"
+          ]
+        }
+      ],
+      "classes": [],
+      "exports": [],
+      "external_dependencies": [
+        "chrome",
+        "jspdf"
+      ]
+    },
+    {
+      "file_path": "content.js",
+      "summary": "This file generates a PDF report of a student's academic results from the IIIT-NR ERP portal. It fetches semester data, calculates grades, and creates a PDF document using the jsPDF library.",
+      "functions": [
+        {
+          "name": "setProgress",
+          "description": "Updates the progress bar and text",
+          "calls": [
+            "bar.style.width",
+            "text.textContent"
+          ],
+          "imports_used": []
+        },
+        {
+          "name": "finishProgress",
+          "description": "Finishes the progress bar and removes the HUD after a delay",
+          "calls": [
+            "setProgress",
+            "setTimeout",
+            "hud.remove"
+          ],
+          "imports_used": []
+        },
+        {
+          "name": "safeFetchJSON",
+          "description": "Fetches JSON data from a URL and throws an error if the response is not OK",
+          "calls": [
+            "fetch",
+            "res.json"
+          ],
+          "imports_used": []
+        },
+        {
+          "name": "calculateTotal",
+          "description": "Calculates the total value of an array of assignments",
+          "calls": [
+            "parseFloat",
+            "isNaN"
+          ],
+          "imports_used": []
+        }
+      ],
+      "classes": [],
+      "exports": [],
+      "external_dependencies": [
+        "jsPDF"
+      ]
+    },
+    {
+      "file_path": "manifest.json",
+      "summary": "This file is a JSON manifest for a browser extension, specifying its metadata, permissions, and functionality. It declares the extension's name, version, and permissions, as well as its background script and action. The extension appears to be designed to export academic results from the IIIT-NR ERP system to PDF.",
+      "functions": [],
+      "classes": [],
+      "exports": [],
+      "external_dependencies": []
+    },
+    {
+      "file_path": "README.md",
+      "summary": "This is a README file for a Chrome extension that extracts academic results from the IIIT-NR ERP portal and exports them as a PDF transcript. The file provides information about the extension's features, how it works, installation instructions, and project structure.",
+      "functions": [],
+      "classes": [],
+      "exports": [],
+      "external_dependencies": []
+    }
+  ],
+  "compact_summaries": [
+    {
+      "file_path": "background.js",
+      "purpose": "This file listens for the chrome action click event and executes scripts on the current tab if it's on the IIIT-NR ERP portal. It injects jspdf and content scripts into the tab.",
+      "functions": [
+        "(anonymous)"
+      ],
+      "classes": [],
+      "imports": [
+        "chrome",
+        "jspdf"
+      ],
+      "key_dependencies": [
+        "chrome",
+        "jspdf"
+      ],
+      "entry_point": false
+    },
+    {
+      "file_path": "content.js",
+      "purpose": "This file generates a PDF report of a student's academic results from the IIIT-NR ERP portal. It fetches semester data, calculates grades, and creates a PDF document using the jsPDF library.",
+      "functions": [
+        "setProgress",
+        "finishProgress",
+        "safeFetchJSON",
+        "calculateTotal"
+      ],
+      "classes": [],
+      "imports": [
+        "jsPDF"
+      ],
+      "key_dependencies": [
+        "jsPDF"
+      ],
+      "entry_point": false
+    },
+    {
+      "file_path": "manifest.json",
+      "purpose": "This file is a JSON manifest for a browser extension, specifying its metadata, permissions, and functionality. It declares the extension's name, version, and permissions, as well as its background scr",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "key_dependencies": [],
+      "entry_point": false
+    },
+    {
+      "file_path": "README.md",
+      "purpose": "This is a README file for a Chrome extension that extracts academic results from the IIIT-NR ERP portal and exports them as a PDF transcript. The file provides information about the extension's featur",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "key_dependencies": [],
+      "entry_point": false
+    }
+  ],
+  "architecture_summary": {
+    "overview": "This codebase is for a Chrome extension that extracts academic results from the IIIT-NR ERP portal and exports them as a PDF transcript. The extension listens for the chrome action click event and executes scripts on the current tab if it's on the IIIT-NR ERP portal. It injects jspdf and content scripts into the tab to generate a PDF report of a student's academic results.",
+    "key_components": [
+      "background.js",
+      "content.js",
+      "manifest.json"
+    ],
+    "design_patterns": [
+      "Event-Driven Architecture"
+    ],
+    "entry_points": [
+      {
+        "file_path": "background.js",
+        "function_name": "(anonymous)",
+        "reason": "Listens for the chrome action click event"
+      }
+    ],
+    "technology_stack": [
+      "chrome",
+      "jsPDF",
+      "jspdf"
+    ]
+  },
+  "mermaid_diagrams": [
+    {
+      "title": "File Dependency Flow",
+      "diagram_type": "file_flow",
+      "mermaid_syntax": "graph TD\n    README_md[\"README.md\"]\n    background_js[\"background.js\"]\n    content_js[\"content.js\"]\n    manifest_json[\"manifest.json\"]"
+    },
+    {
+      "title": "Function Call Flow",
+      "diagram_type": "function_flow",
+      "mermaid_syntax": "graph LR\n    background_js__(anonymous)[\"background.js::(anonymous)\"] --> chrome_scripting_executeScript[\"chrome.scripting.executeScript\"]\n    background_js__(anonymous)[\"background.js::(anonymous)\"] --> chrome_action_onClicked_addListener[\"chrome.action.onClicked.addListener\"]\n    content_js__setProgress[\"content.js::setProgress\"] --> bar_style_width[\"bar.style.width\"]\n    content_js__setProgress[\"content.js::setProgress\"] --> text_textContent[\"text.textContent\"]\n    content_js__finishProgress[\"content.js::finishProgress\"] --> setProgress[\"setProgress\"]\n    content_js__finishProgress[\"content.js::finishProgress\"] --> setTimeout[\"setTimeout\"]\n    content_js__finishProgress[\"content.js::finishProgress\"] --> hud_remove[\"hud.remove\"]\n    content_js__safeFetchJSON[\"content.js::safeFetchJSON\"] --> fetch[\"fetch\"]\n    content_js__safeFetchJSON[\"content.js::safeFetchJSON\"] --> res_json[\"res.json\"]\n    content_js__calculateTotal[\"content.js::calculateTotal\"] --> parseFloat[\"parseFloat\"]\n    content_js__calculateTotal[\"content.js::calculateTotal\"] --> isNaN[\"isNaN\"]"
+    },
+    {
+      "title": "Entry Point Flow",
+      "diagram_type": "entry_point_flow",
+      "mermaid_syntax": "graph TD\n    background_js__anonymous[\"background.js::(anonymous)\"]\n    background_js__anonymous --> chrome_scripting_executeScript[\"chrome.scripting.executeScript\"]\n    background_js__anonymous --> chrome_action_onClicked_addListener[\"chrome.action.onClicked.addListener\"]"
+    }
+  ],
+  "repo_map": {
+    "files": {
+      "background.js": {
+        "language": "JavaScript",
+        "size_bytes": 698,
+        "tokens_estimate": 174,
+        "extension": ".js",
+        "directory": "."
+      },
+      "content.js": {
+        "language": "JavaScript",
+        "size_bytes": 6818,
+        "tokens_estimate": 1704,
+        "extension": ".js",
+        "directory": "."
+      },
+      "manifest.json": {
+        "language": "JSON",
+        "size_bytes": 544,
+        "tokens_estimate": 136,
+        "extension": ".json",
+        "directory": "."
+      },
+      "README.md": {
+        "language": "Markdown",
+        "size_bytes": 3893,
+        "tokens_estimate": 973,
+        "extension": ".md",
+        "directory": "."
+      }
+    },
+    "total_files": 4,
+    "total_tokens_estimate": 2987,
+    "languages": {
+      "JavaScript": 2,
+      "JSON": 1,
+      "Markdown": 1
+    },
+    "directory_tree": [
+      "."
+    ]
+  },
+  "status": "completed",
+  "error_message": null
+}

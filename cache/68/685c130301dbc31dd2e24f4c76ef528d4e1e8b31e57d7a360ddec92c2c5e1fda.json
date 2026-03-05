@@ -1,0 +1,19 @@
+{
+  "analysis": {
+    "file_path": "README.md",
+    "summary": "This is a README file for a Chrome extension that extracts academic results from the IIIT-NR ERP portal and exports them as a clean, well-formatted PDF transcript. The file provides information about the extension's features, how it works, installation, project structure, security, and possible future enhancements.",
+    "functions": [],
+    "classes": [],
+    "exports": [],
+    "external_dependencies": []
+  },
+  "summary": {
+    "file_path": "README.md",
+    "purpose": "This is a README file for a Chrome extension that extracts academic results from the IIIT-NR ERP portal and exports them as a clean, well-formatted PDF transcript. The file provides information about ",
+    "functions": [],
+    "classes": [],
+    "imports": [],
+    "key_dependencies": [],
+    "entry_point": false
+  }
+}

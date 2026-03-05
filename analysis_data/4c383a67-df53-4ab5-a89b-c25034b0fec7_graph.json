@@ -1,0 +1,70 @@
+{
+  "nodes": [
+    {
+      "id": "background.js",
+      "type": "file",
+      "label": "background.js",
+      "file_path": "background.js"
+    },
+    {
+      "id": "background.js::(anonymous function)",
+      "type": "function",
+      "label": "(anonymous function)",
+      "file_path": "background.js"
+    },
+    {
+      "id": "content.js",
+      "type": "file",
+      "label": "content.js",
+      "file_path": "content.js"
+    },
+    {
+      "id": "content.js::setProgress",
+      "type": "function",
+      "label": "setProgress",
+      "file_path": "content.js"
+    },
+    {
+      "id": "content.js::finishProgress",
+      "type": "function",
+      "label": "finishProgress",
+      "file_path": "content.js"
+    },
+    {
+      "id": "content.js::safeFetchJSON",
+      "type": "function",
+      "label": "safeFetchJSON",
+      "file_path": "content.js"
+    },
+    {
+      "id": "content.js::calculateTotal",
+      "type": "function",
+      "label": "calculateTotal",
+      "file_path": "content.js"
+    },
+    {
+      "id": "manifest.json",
+      "type": "file",
+      "label": "manifest.json",
+      "file_path": "manifest.json"
+    },
+    {
+      "id": "README.md",
+      "type": "file",
+      "label": "README.md",
+      "file_path": "README.md"
+    }
+  ],
+  "edges": [
+    {
+      "source": "content.js::finishProgress",
+      "target": "content.js::setProgress",
+      "relationship": "calls"
+    }
+  ],
+  "adjacency_list": {
+    "content.js::finishProgress": [
+      "content.js::setProgress"
+    ]
+  }
+}
