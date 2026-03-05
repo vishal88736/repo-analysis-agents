@@ -57,6 +57,48 @@ class FileAnalysisResult(BaseModel):
     external_dependencies: list[str] = Field(default_factory=list)
 
 
+# === Feature 2: Compact File Summary ===
+
+class CompactFileSummary(BaseModel):
+    """Lightweight summary — stored and reused instead of full analysis text."""
+    file_path: str
+    purpose: str = ""
+    functions: list[str] = Field(default_factory=list)
+    classes: list[str] = Field(default_factory=list)
+    imports: list[str] = Field(default_factory=list)
+    key_dependencies: list[str] = Field(default_factory=list)
+    entry_point: bool = False
+
+
+# === Feature 1: Repository Map ===
+
+class RepoMapEntry(BaseModel):
+    language: str = "unknown"
+    size_bytes: int = 0
+    tokens_estimate: int = 0
+    extension: str = ""
+    directory: str = ""
+
+
+class RepoMap(BaseModel):
+    """Lightweight repo structure — no code content, just metadata."""
+    files: dict[str, RepoMapEntry] = Field(default_factory=dict)
+    total_files: int = 0
+    total_tokens_estimate: int = 0
+    languages: dict[str, int] = Field(default_factory=dict)
+    directory_tree: list[str] = Field(default_factory=list)
+
+
+# === Feature 11/16: Query Plan ===
+
+class QueryPlan(BaseModel):
+    """Output of the query planning agent."""
+    relevant_files: list[str] = Field(default_factory=list)
+    relevant_modules: list[str] = Field(default_factory=list)
+    reasoning: str = ""
+    needs_raw_code: bool = False
+
+
 class EntryPoint(BaseModel):
     file_path: str
     function_name: str = ""
@@ -82,7 +124,9 @@ class FullAnalysisReport(BaseModel):
     repository_url: str
     total_files: int = 0
     file_analyses: list[FileAnalysisResult] = Field(default_factory=list)
+    compact_summaries: list[CompactFileSummary] = Field(default_factory=list)
     architecture_summary: ArchitectureSummary = Field(default_factory=ArchitectureSummary)
     mermaid_diagrams: list[MermaidDiagram] = Field(default_factory=list)
+    repo_map: RepoMap | None = None
     status: str = "pending"
     error_message: str | None = None

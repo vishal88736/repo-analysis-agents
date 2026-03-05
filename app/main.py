@@ -16,18 +16,19 @@ async def lifespan(app: FastAPI):
     settings.clone_path.mkdir(parents=True, exist_ok=True)
     settings.vector_store_path.mkdir(parents=True, exist_ok=True)
     settings.analysis_store_path.mkdir(parents=True, exist_ok=True)
+    settings.cache_path.mkdir(parents=True, exist_ok=True)
     app.state.analysis_store = AnalysisStore(settings.analysis_store_path)
     yield
 
 
 app = FastAPI(
-    title="Multi-Agent Repo Analyzer (Groq + Open-Source LLMs)",
+    title="Multi-Agent Repo Analyzer (Groq + Gemini)",
     description=(
-        "Analyzes GitHub repositories using Groq-hosted open-source models "
-        "(Llama 3.3, Mixtral, Gemma) with batch agent processing, "
-        "tree-sitter parsing, dependency graphs, and RAG."
+        "Analyzes GitHub repositories using Groq + Gemini with "
+        "token optimization, caching, hybrid RAG, progressive loading, "
+        "and multi-LLM routing."
     ),
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 

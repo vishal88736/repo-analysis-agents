@@ -1,5 +1,5 @@
 """
-Centralized configuration — Groq API + processing settings.
+Centralized configuration — Groq + Gemini + processing settings.
 """
 
 from pathlib import Path
@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     groq_max_tokens: int = 4096
     groq_temperature: float = 0.2
 
+    # --- Gemini API (optional) ---
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+
     # --- Processing ---
     batch_size: int = 10
     max_concurrent_llm_calls: int = 5
@@ -27,10 +31,15 @@ class Settings(BaseSettings):
     llm_retry_attempts: int = 3
     llm_retry_delay: float = 2.0
 
+    # --- Token Budgets ---
+    max_file_tokens: int = 1500
+    max_prompt_tokens: int = 3000
+
     # --- Storage ---
     clone_base_dir: str = "./repos"
     vector_store_dir: str = "./vector_stores"
     analysis_store_dir: str = "./analysis_data"
+    cache_dir: str = "./cache"
 
     # --- RAG ---
     rag_top_k: int = 10
@@ -54,6 +63,14 @@ class Settings(BaseSettings):
     @property
     def analysis_store_path(self) -> Path:
         return Path(self.analysis_store_dir)
+
+    @property
+    def cache_path(self) -> Path:
+        return Path(self.cache_dir)
+
+    @property
+    def gemini_available(self) -> bool:
+        return bool(self.gemini_api_key)
 
 
 settings = Settings()

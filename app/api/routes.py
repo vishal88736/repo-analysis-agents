@@ -1,13 +1,8 @@
 """
-REST API Endpoints:
-  POST /analyze       → Start analysis (returns analysis_id)
-  GET  /status/{id}   → Check pipeline status
-  GET  /report/{id}   → Full report with summaries + diagrams
-  POST /query         → RAG question answering
+REST API — with hybrid retrieval (F4) and query planning (F11).
 """
 
 import logging
-import asyncio
 
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, status
 
@@ -19,9 +14,12 @@ from app.schemas.api_models import (
 from app.services.analysis_store import AnalysisStore
 from app.services.orchestrator import run_analysis_pipeline, create_analysis_id
 from app.agents.groq_client import GroqClient
+from app.agents.llm_router import LLMRouter
 from app.agents.rag_answer_agent import answer_query
+from app.agents.query_planner import plan_query
 from app.graph.dependency_graph import get_dependency_context_for_file
 from app.rag.vector_store import VectorStore
+from app.rag.hybrid_retriever import hybrid_retrieve
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Analysis"])
@@ -38,14 +36,12 @@ async def start_analysis(
     background_tasks: BackgroundTasks,
     store: AnalysisStore = Depends(get_analysis_store),
 ):
-    """Start repository analysis. Processing happens in background."""
     url = request.repository_url.strip()
     if not url.startswith("https://github.com/"):
-        raise HTTPException(status_code=400, detail="Only GitHub URLs supported (https://github.com/owner/repo)")
+        raise HTTPException(status_code=400, detail="Only GitHub URLs supported")
 
     analysis_id = create_analysis_id()
     await store.set_status(analysis_id, "pending")
-
     background_tasks.add_task(run_analysis_pipeline, analysis_id, url, store)
 
     return AnalyzeResponse(
@@ -57,7 +53,6 @@ async def start_analysis(
 
 @router.get("/status/{analysis_id}", response_model=StatusResponse)
 async def get_status(analysis_id: str, store: AnalysisStore = Depends(get_analysis_store)):
-    """Check analysis pipeline status."""
     s = await store.get_status(analysis_id)
     if s is None:
         raise HTTPException(status_code=404, detail=f"Analysis '{analysis_id}' not found.")
@@ -70,7 +65,6 @@ async def get_status(analysis_id: str, store: AnalysisStore = Depends(get_analys
     responses={404: {"model": ErrorResponse}},
 )
 async def get_report(analysis_id: str, store: AnalysisStore = Depends(get_analysis_store)):
-    """Get the full analysis report with summaries, diagrams, etc."""
     s = await store.get_status(analysis_id)
     if s is None:
         raise HTTPException(status_code=404, detail="Analysis not found.")
@@ -116,7 +110,7 @@ async def query_codebase(
     store: AnalysisStore = Depends(get_analysis_store),
     vector_store: VectorStore = Depends(get_vector_store),
 ):
-    """RAG-based question answering: vector search → context → Groq LLM answer."""
+    """RAG query with hybrid retrieval + query planning + progressive loading."""
     s = await store.get_status(request.analysis_id)
     if s is None:
         raise HTTPException(status_code=404, detail="Analysis not found.")
@@ -125,11 +119,26 @@ async def query_codebase(
 
     report = await store.load_report(request.analysis_id)
     graph = await store.load_graph(request.analysis_id)
+    repo_map = await store.load_repo_map(request.analysis_id)
+    compact_summaries = await store.load_compact_summaries(request.analysis_id)
 
-    # Step 1: Vector search
-    chunks = await vector_store.search(analysis_id=request.analysis_id, query=request.question)
+    groq = GroqClient()
+    llm_router = LLMRouter(groq)
 
-    # Step 2: Dependency context augmentation
+    # Feature 11: Query planning
+    query_plan = await plan_query(llm_router, request.question, repo_map, compact_summaries)
+    logger.info("Query plan: %d relevant files, needs_code=%s", len(query_plan.relevant_files), query_plan.needs_raw_code)
+
+    # Feature 4: Hybrid retrieval
+    chunks = await hybrid_retrieve(
+        vector_store=vector_store,
+        analysis_id=request.analysis_id,
+        query=request.question,
+        compact_summaries=compact_summaries,
+        graph=graph,
+    )
+
+    # Dependency context
     dep_context = ""
     if graph and chunks:
         relevant_files = {
@@ -141,10 +150,18 @@ async def query_codebase(
             get_dependency_context_for_file(graph, fp) for fp in relevant_files
         )
 
-    # Step 3: Groq LLM answer
-    groq = GroqClient()
+    # Feature 5: Progressive loading answer
     arch = report.architecture_summary.overview if report else ""
-    answer = await answer_query(groq, request.question, chunks, dep_context, arch)
+    answer = await answer_query(
+        router=llm_router,
+        question=request.question,
+        retrieved_chunks=chunks,
+        dependency_context=dep_context,
+        architecture_summary=arch,
+        repo_map=repo_map,
+        compact_summaries=compact_summaries,
+        query_plan=query_plan,
+    )
 
     sources = list({
         c.get("metadata", {}).get("file_path", "")

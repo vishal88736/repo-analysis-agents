@@ -1,22 +1,51 @@
-"""Repository Scanner — clones GitHub repo, scans files recursively."""
+"""
+Repository Scanner — clones GitHub repo, scans files, generates repo map.
+Feature 1: Repo Map Generation.
+Feature 6: Enhanced File Filtering.
+"""
 
 import logging
 import os
 from pathlib import Path
+from collections import defaultdict
 
 import git
 
 from app.config import settings
 from app.core.exceptions import RepositoryCloneError
-from app.schemas.analysis import FileMetadata
+from app.schemas.analysis import FileMetadata, RepoMap, RepoMapEntry
+from app.services.token_utils import CHARS_PER_TOKEN
 
 logger = logging.getLogger(__name__)
 
+# Feature 6: Enhanced filtering
 IGNORED_DIRS = {
     ".git", "node_modules", "venv", ".venv", "env", ".env",
     "dist", "build", "__pycache__", ".tox", ".mypy_cache",
     ".pytest_cache", "vendor", "target", ".idea", ".vscode",
-    "coverage", ".next", ".nuxt", "out",
+    "coverage", ".next", ".nuxt", "out", ".cache", ".turbo",
+    "bower_components", ".gradle", ".mvn", "bin", "obj",
+    ".terraform", ".serverless", "cdk.out",
+}
+
+# Feature 6: Skip binary/asset extensions
+IGNORED_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".bmp",
+    ".mp3", ".mp4", ".avi", ".mov", ".wav",
+    ".zip", ".tar", ".gz", ".rar", ".7z",
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx",
+    ".map", ".min.js", ".min.css",
+    ".lock", ".sum",
+    ".woff", ".woff2", ".ttf", ".eot",
+    ".pyc", ".pyo", ".class", ".o", ".so", ".dll", ".exe",
+    ".DS_Store",
+}
+
+# Feature 6: Skip specific filenames
+IGNORED_FILES = {
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+    "composer.lock", "Gemfile.lock", "Cargo.lock",
+    "go.sum", "poetry.lock", "Pipfile.lock",
 }
 
 CODE_EXTENSIONS = {
@@ -67,8 +96,20 @@ def clone_repository(url: str) -> Path:
         raise RepositoryCloneError(f"Clone failed: {url}", details=str(e))
 
 
+def _should_skip_file(filename: str, ext: str) -> bool:
+    """Feature 6: Enhanced file filtering."""
+    if filename in IGNORED_FILES:
+        return True
+    if ext in IGNORED_EXTENSIONS:
+        return True
+    # Skip minified files
+    if filename.endswith(".min.js") or filename.endswith(".min.css"):
+        return True
+    return False
+
+
 def scan_repository(repo_path: Path) -> list[FileMetadata]:
-    """Recursively scan repo for code files."""
+    """Recursively scan repo for code files with enhanced filtering."""
     files = []
     max_size = settings.max_file_size_kb * 1024
 
@@ -80,6 +121,10 @@ def scan_repository(repo_path: Path) -> list[FileMetadata]:
             ext = full_path.suffix.lower()
             if filename.lower() == "dockerfile":
                 ext = ".dockerfile"
+
+            # Feature 6: Enhanced filtering
+            if _should_skip_file(filename, ext):
+                continue
             if ext not in CODE_EXTENSIONS:
                 continue
 
@@ -99,3 +144,47 @@ def scan_repository(repo_path: Path) -> list[FileMetadata]:
 
     logger.info("Scanned %d files in %s", len(files), repo_path)
     return files
+
+
+def generate_repo_map(repo_path: Path, files: list[FileMetadata]) -> RepoMap:
+    """
+    Feature 1: Generate repository map from scanned files.
+    Stores directory tree, file paths, sizes, types, token estimates.
+    """
+    file_entries: dict[str, RepoMapEntry] = {}
+    lang_count: dict[str, int] = defaultdict(int)
+    total_tokens = 0
+    directories: set[str] = set()
+
+    for f in files:
+        tokens_est = f.size_bytes // CHARS_PER_TOKEN
+        total_tokens += tokens_est
+
+        directory = str(Path(f.path).parent)
+        directories.add(directory)
+
+        file_entries[f.path] = RepoMapEntry(
+            language=f.language,
+            size_bytes=f.size_bytes,
+            tokens_estimate=tokens_est,
+            extension=f.extension,
+            directory=directory,
+        )
+        lang_count[f.language] += 1
+
+    # Build directory tree (sorted)
+    dir_tree = sorted(directories)
+
+    repo_map = RepoMap(
+        files=file_entries,
+        total_files=len(files),
+        total_tokens_estimate=total_tokens,
+        languages=dict(lang_count),
+        directory_tree=dir_tree,
+    )
+
+    logger.info(
+        "Repo map: %d files, ~%d tokens, %d languages",
+        repo_map.total_files, repo_map.total_tokens_estimate, len(repo_map.languages),
+    )
+    return repo_map

@@ -8,6 +8,9 @@ python-dotenv==1.0.1
 # === Groq SDK (official) ===
 groq==0.25.0
 
+# === Google Gemini SDK ===
+google-generativeai==0.8.5
+
 # === Async & Retry ===
 aiofiles==24.1.0
 tenacity==9.0.0
